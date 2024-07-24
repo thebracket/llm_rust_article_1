@@ -1,0 +1,16 @@
+[package]
+name = "categorize"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+load_data = { path = "../load_data" }
+tokio = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+rand = { workspace = true }
+scraper = "0.19.1"
+itertools = { workspace = true }
+futures = "0.3.30"

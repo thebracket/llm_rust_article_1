@@ -1,0 +1,10 @@
+[package]
+name = "load_data"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+csv = { workspace = true}
+serde = { workspace = true, features = ["derive"] }
+anyhow = { workspace = true}
+itertools = { workspace = true}
