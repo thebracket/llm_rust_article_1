@@ -201,5 +201,8 @@ async fn main() -> Result<()> {
         }
     }
 
+    // Call any leftover items
+    join_all(futures).await;
+
     Ok(())
 }
