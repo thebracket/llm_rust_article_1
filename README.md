@@ -68,8 +68,6 @@ pub fn load_asn_domains() -> Result<Vec<String>> {
         .flatten()// Keep only Ok records
         .map(|r| r.domain.to_lowercase().trim().to_string()) // Extract just the domain
         .filter(|d| !d.is_empty()) // Remove empty domains
-        //.sorted() // Sort the results
-        //.dedup() // Remove duplicates
         .collect(); // Move the results into a vector
 
     println!("Loaded {} domains", rows.len());
