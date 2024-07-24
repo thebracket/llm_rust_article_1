@@ -551,8 +551,13 @@ async fn main() -> Result<()> {
   let report_failures = failures().await;
 
   // Create a big set of tasks
+  let already_done = std::fs::read_to_string("categories.csv").unwrap_or_default();
   let mut futures = Vec::new();
   for domain in domains.into_iter() {
+    // Skip domains we've already done - in case we have to run it more than once
+    if already_done.contains(&domain) {
+      continue;
+    }
     // Clone the channels - they are designed for this.
     let my_success = report_success.clone();
     let my_failure = report_failures.clone();

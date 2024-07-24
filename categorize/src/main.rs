@@ -1,3 +1,4 @@
+use std::time::Duration;
 use anyhow::Result;
 use futures::future::join_all;
 use itertools::Itertools;
@@ -72,6 +73,7 @@ async fn website_text(domain: &str) -> Result<String> {
     // Setup Reqwest with the header
     let client = reqwest::Client::builder()
         .default_headers(headers)
+        .timeout(Duration::from_secs(30))
         .build()?;
 
     // Fetch the website
@@ -167,8 +169,13 @@ async fn main() -> Result<()> {
     let report_failures = failures().await;
 
     // Create a big set of tasks
+    let already_done = std::fs::read_to_string("categories.csv").unwrap_or_default();
     let mut futures = Vec::new();
     for domain in domains.into_iter() {
+        // Skip domains we've already done - in case we have to run it more than once
+        if already_done.contains(&domain) {
+            continue;
+        }
         // Clone the channels - they are designed for this.
         let my_success = report_success.clone();
         let my_failure = report_failures.clone();
