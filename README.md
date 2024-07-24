@@ -55,7 +55,7 @@ struct AsnRow {
 }
 ```
 
-Now we can read the data from the CSV file. We only care about the `domain` field, so we'll
+Next, let's read the data from the CSV file. We only care about the `domain` field, so we'll
 write some code to load the data and return just that field:
 
 ```rust
@@ -84,11 +84,13 @@ Fortunately, a crate named `Itertools` makes this very easy.
 > it will be substantially slower. Generating a hash for every string is expensive. It's *much*
 > faster to sort the strings, iterate forward and only retain unique items!
 
+Add a dependency on `Itertools`:
+
 ```bash
 cargo add itertools
 ```
 
-Now we can add two lines to our function, and we're done!
+We can then add two lines to our function, and we're done!
 
 ```rust
 pub fn load_asn_domains() -> Result<Vec<String>> {
@@ -116,7 +118,7 @@ doing the same work over and over again.
 ## Setting Up a Local LLM
 
 You probably don't want to pay for 63,519 API calls (assuming everything is one shot, works perfectly
-first time, and you never need to run a second test!). So lets set up a local LLM. I used
+first time, and you never need to run a second test!). So let's set up a local LLM. I used
 `Ollama` on my Linux box: it neatly wraps the complexities of `llama-cpp`, supports my AMD GPU
 out of the box, and is easy to install. Your setup will vary by platform. Visit 
 [https://ollama.com/](https://ollama.com/) and follow the instructions there. I'm using the
@@ -147,8 +149,8 @@ So now that we have a working local LLM, let's talk to it via the API from Rust.
 
 ## Talking to the LLM
 
-In our Rust code, we're going to add two dependencies: Tokio (an async runtime) and 
-Reqwest (an HTTP client). We'll also use `serde_json` to make JSON easy to work with.
+In our Rust code, we're going to add three dependencies: `Tokio` (an async runtime) and 
+`Reqwest` (an HTTP client) and `serde_json` (to make JSON easy to work with).
 
 ```bash
 cargo add tokio -F full
@@ -229,13 +231,15 @@ On my machine, this returns:
 Good morning! Hope you're having a great start to the day! How can I help or chat with you today?
 ```
 
+Now that we have a working LLM, we can start categorizing the data.
+
 ## Categorizing the Data: First Try - Oneshot!
 
-"Oneshot" is a term used in the LLM world to describe a single request with no
+> "Oneshot" is a term used in the LLM world to describe a single request with no
 helper data, no introspection, chain-of-thought or anything else. In a perfect
 world, this would be all you need. (Note: this isn't a perfect world).
 
-It will take a while to categorize 63,519 domains. We'll start with a small
+It will take a while to categorize 63,519 domains, so we'll start with a small
 sample. Let's add the `rand` crate (`cargo add rand`) to help us pick 
 random test data.
 
@@ -268,8 +272,8 @@ Things to note:
 
 * We're using a very simple prompt. Adding "do not elaborate" and "do not explain" is a
   common technique to get a single-word answer. LLMs like to talk.
-* I like to say "please" to LLMs, so when the inevitable *Super Intelligence Apocalypse* happens, I'll be spared.
 * We're not providing *any* additional information or context---we're relying on the LLM's baked-in knowledge.
+* I like to say "please" to LLMs, so when the inevitable *Super Intelligence Apocalypse* happens, hopefully I'll be spared.
 
 Running this gave me:
 
@@ -288,7 +292,12 @@ Unsurprisingly, the LLM was wrong. `r-tk.net` is a Russian company that provides
 streaming television services. `365it.fr`is an IT services company in France.
 
 I ran it a few more times, and the results weren't great. Sometimes, the LLM was
-spot on---and most of the time, it was effectively random.
+spot on---and most of the time, it was hallucinating an effectively random answer.
+
+> Large Language Models are "next token predictors". While there is some evidence that emergent
+> behavior develops in large models, they aren't a font of all knowledge. If a domain wasn't
+> part of their training data, they don't know what it is---and will "hallucinate" a likely-
+> sounding answer.
 
 So let's try and give the LLM some context to work with.
 
@@ -296,6 +305,11 @@ So let's try and give the LLM some context to work with.
 
 The vast majority of the listed domains have a website associated. Maybe we could
 scrape text from the website and use that as context?
+
+> Many recent LLMs can use tools. For example, ChatGPT can fire up a web browser
+> to search for the answer to your question. This article isn't going to try to
+> incorporate tool usage---instead, we'll scrape the website data and provide
+> context directly.
 
 Let's make use of the `reqwest` crate to fetch the website data, and the `scraper`
 crate to extract some text. LLMs have a pretty short context window, so we
@@ -321,6 +335,7 @@ async fn website_text(domain: &str) -> Result<String> {
   // Setup Reqwest with the header
   let client = reqwest::Client::builder()
           .default_headers(headers)
+          .timeout(Duration::from_secs(30))
           .build()?;
 
   // Fetch the website
@@ -339,7 +354,7 @@ async fn website_text(domain: &str) -> Result<String> {
   let result = content
           .into_iter() // Consuming iterator
           .sorted() // Sort alphabetically
-          .dedup_with_count()// Deduplicatae, and return a tuple (count, word)
+          .dedup_with_count()// De-duplicate, and return a tuple (count, word)
           .sorted_by(|a, b| b.0.cmp(&a.0)) // Sort by count, descending
           .map(|(count, word)| word)// Take only the word
           .take(100)// Take the top 100 words
@@ -349,10 +364,16 @@ async fn website_text(domain: &str) -> Result<String> {
 }
 ```
 
-That's quite a mouthful, but it does a lot: it fetches the website, parses the HTML. It
-then calls a helper function (`find_content`) to extract words from likely parts
-of the site. It then sorts the words, deduplicates them, sorts them by count, and
-returns the top 100 words as a string.
+That's quite a mouthful, but it does a lot:
+
+1. The function creates a header mimicking Firefox. Many domains won't reply without a valid `USER-AGENT` string.
+2. It creates a Reqwest instance featuring the header, and a 30-second timeout window for obtaining data from the remote website.
+3. It fetches the website, and extracts the result's body as text.
+4. It uses `scraper` to parse the HTML.
+5. It searches for text in likely places: the title, meta tags, unordered lists, list items, headers, and paragraphs. The `find_content` function (below) gathers the word list from each section of the website.
+6. It sorts the words.
+7. It de-duplicates the word list, keeping count of how many times each word appeared.
+8. It retains the 100 most used words on the website.
 
 The helper function uses the `scraper` crate to extract text from the HTML,
 and convert it into lowercase words as a vector of strings:
@@ -381,11 +402,30 @@ fn find_content(selector: &str, document: &Html) -> Vec<String> {
 }
 ```
 
+> Why `trim` and `to_lowercase`? Websites are often full of whitespace, and often have
+> pretty strange formatting. We only care about the word *content* - we don't want the
+> gaps in-between. Normalizing to lower-case ensures that "Provision" and "provision"
+> will be counted as the same word.
+
 Here's the resulting context from `provision.ro` (which my system picked at random):
 
 ```
-security management data application threat protection risk firewall access endpoint digital privacy e-mail encryption gateway response secure testing detection hunting identity infrastructure network assessment training vulnerability advance analytics/ anti-phishing asset attacks authentication automated automation awareness bots browser casb centric classification client collaboration container cspm database ddos deception detection/protection discovery ediscovery governance human incident intelligence isolation malware mast penetration privilege rights runtime sase self-protection side siem soar third-party tools ueba visibility wireless media operations analysis cloud compliance generation masking messaging mobile next social trust zero about services solutions provision technologies partners contact find home more cyber experience expertise help information provision’s
+security management data application threat protection risk firewall access endpoint 
+digital privacy e-mail encryption gateway response secure testing detection hunting 
+identity infrastructure network assessment training vulnerability advance 
+analytics/ anti-phishing asset attacks authentication automated automation awareness 
+bots browser casb centric classification client collaboration container cspm database 
+ddos deception detection/protection discovery ediscovery governance human incident 
+intelligence isolation malware mast penetration privilege rights runtime sase 
+self-protection side siem soar third-party tools ueba visibility wireless media 
+operations analysis cloud compliance generation masking messaging mobile next social 
+trust zero about services solutions provision technologies partners contact find home 
+more cyber experience expertise help information provision’s
 ```
+
+Combining these functions together yields a list of at-most 100 words from the website. We
+have to keep the list small, to not overwhelm the LLM's context window---and keep processing
+relatively performant.
 
 So now we slightly change our `main` function to include the context in the prompt:
 
@@ -441,7 +481,13 @@ Manually visiting these sites:
 One scraping failure, and 4/4 on categorization! I repeated this a few times, and it was
 consistently good!
 
+Now let's turn this into a program that can complete our intended task.
+
 ## Let's Add Some Performance!
+
+> Running the LLM queries is by far the slowest part of this process. We aren't going to
+> optimize `Ollama` itself. Sadly, buying a better GPU---or using a faster LLM- is the best 
+> way to speed that up.
 
 Running through each site one-at-a-time is going to take a *really long time*. Let's speed things up,
 and make use of Tokio's async capabilities (one thread per core, work stealing). We'll add the
@@ -531,6 +577,8 @@ async fn categorize_domain(domain: &str, text: &str) -> Result<Domain> {
 }
 ```
 
+Finally, let's tie this together to process the entire list.
+
 ### And Let's Call It!
 
 We're probably going to melt some CPU and GPU chips here! Let's do it!
@@ -619,3 +667,8 @@ There's quite a few possible improvements to this code:
 * You could use more than one LLM and take the majority answer.
 * You should try different LLM models. Llama 3 is a fun, open source model---but there's a *lot* of models out there!
 * You could definitely improve the word selection algorithm. Remove stop words, prioritize the title, etc.
+
+The final program categorizes about 1,300 domains per hour on my MacBook Air M1. It's not
+amazingly fast, but it's not bad either. It's definitely faster than doing it by hand! 
+Spot-checking the results shows that it's pretty accurate, too. It's not perfect, but it's
+more accurate than I would be if I read all 63,519 domains myself!
