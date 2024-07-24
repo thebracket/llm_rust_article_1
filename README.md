@@ -28,7 +28,7 @@ start_ip,end_ip,asn,name,domain
 
 ## Loading the Data
 
-> The code for this is in [load_data/](load_data/).
+> The code for this is in [load_data/](./load_data/).
 
 Rust makes reading CSV files easy. We'll use a couple of crates to help us out: Serde and CSV. 
 We'll also include `anyhow` for easy error handling. You can add them as follows:
@@ -540,42 +540,45 @@ We're probably going to melt some CPU and GPU chips here! Let's do it!
 ```rust
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Load the domains
-    let mut domains = load_asn_domains()?;
+  // Load the domains
+  let mut domains = load_asn_domains()?;
 
-    // Shuffle the domains (so in test runs we aren't always hitting the same ones)
-    domains.shuffle(&mut rand::thread_rng());
+  // Shuffle the domains (so in test runs we aren't always hitting the same ones)
+  domains.shuffle(&mut rand::thread_rng());
 
-    // Create the channels for results
-    let report_success = success().await;
-    let report_failures = failures().await;
+  // Create the channels for results
+  let report_success = success().await;
+  let report_failures = failures().await;
 
-    // Create a big set of tasks
-    let mut futures = Vec::new();
-    // NOTE: Remove take(10) to run all domains.
-    for domain in domains.into_iter().take(10) {
-        // Clone the channels - they are designed for this.
-        let my_success = report_success.clone();
-        let my_failure = report_failures.clone();
-        let future = tokio::spawn(async move {
-            match website_text(&domain).await {
-                Ok(text) => {
-                    match categorize_domain(&domain, &text).await {
-                        Ok(domain) => { let _ = my_success.send(domain).await; },
-                        Err(_) => { let _ = my_failure.send(domain).await; },
-                    }
-                }
-                Err(_) => {
-                    let _ = my_failure.send(domain).await;
-                }
-            }
-        });
-        futures.push(future);
+  // Create a big set of tasks
+  let mut futures = Vec::new();
+  for domain in domains.into_iter() {
+    // Clone the channels - they are designed for this.
+    let my_success = report_success.clone();
+    let my_failure = report_failures.clone();
+    let future = tokio::spawn(async move {
+      match website_text(&domain).await {
+        Ok(text) => {
+          match categorize_domain(&domain, &text).await {
+            Ok(domain) => { let _ = my_success.send(domain).await; },
+            Err(_) => { let _ = my_failure.send(domain).await; },
+          }
+        }
+        Err(_) => {
+          let _ = my_failure.send(domain).await;
+        }
+      }
+    });
+    futures.push(future);
+
+    // Limit the number of concurrent tasks
+    if futures.len() >= 32 {
+      let the_future: Vec<_> = futures.drain(..).collect();
+      let _ = join_all(the_future).await;
     }
+  }
 
-    // Await completion of all tasks
-    join_all(futures).await;
-    Ok(())
+  Ok(())
 }
 ```
 

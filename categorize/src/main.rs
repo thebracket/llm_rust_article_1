@@ -92,7 +92,7 @@ async fn website_text(domain: &str) -> Result<String> {
         .sorted() // Sort alphabetically
         .dedup_with_count()// Deduplicatae, and return a tuple (count, word)
         .sorted_by(|a, b| b.0.cmp(&a.0)) // Sort by count, descending
-        .map(|(count, word)| word)// Take only the word
+        .map(|(_count, word)| word)// Take only the word
         .take(100)// Take the top 100 words
         .join(" "); // Join them into a string
 
@@ -168,7 +168,7 @@ async fn main() -> Result<()> {
 
     // Create a big set of tasks
     let mut futures = Vec::new();
-    for domain in domains.into_iter().take(10) {
+    for domain in domains.into_iter() {
         // Clone the channels - they are designed for this.
         let my_success = report_success.clone();
         let my_failure = report_failures.clone();
@@ -186,9 +186,13 @@ async fn main() -> Result<()> {
             }
         });
         futures.push(future);
+
+        // Limit the number of concurrent tasks
+        if futures.len() >= 32 {
+            let the_future: Vec<_> = futures.drain(..).collect();
+            let _ = join_all(the_future).await;
+        }
     }
 
-    // Await completion of all tasks
-    join_all(futures).await;
     Ok(())
 }
