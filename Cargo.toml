@@ -12,8 +12,10 @@ tokio = { version = "1.10.0", features = ["full"] }
 reqwest = { version = "0.12.5", features = ["json"] }
 serde_json = "1.0.120"
 rand = "0.8.5"
+scraper = "0.19.1"
+futures = "0.3.30"
 
 [workspace]
 members = [ "categorize",
-    "load_data",
+    "load_data", "part2/analyze_with_polars", "part2/categorize2",
 ]

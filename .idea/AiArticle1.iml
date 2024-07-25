@@ -5,6 +5,8 @@
       <sourceFolder url="file://$MODULE_DIR$/load_data/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/categorize/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/part2/analyze_with_polars/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/part2/categorize2/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/load_data/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>

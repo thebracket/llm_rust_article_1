@@ -1,0 +1,8 @@
+[package]
+name = "analyze_with_polars"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow.workspace = true
+polars = { version = "0.41.3", features = ["dtype-categorical", "csv"] }

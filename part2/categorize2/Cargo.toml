@@ -1,16 +1,18 @@
 [package]
-name = "categorize"
+name = "categorize2"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-load_data = { path = "../load_data" }
+csv = { workspace = true}
+serde = { workspace = true, features = ["derive"] }
+anyhow = { workspace = true}
+itertools = { workspace = true}
 tokio = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 serde_json = { workspace = true }
-anyhow = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
 rand = { workspace = true }
 scraper = { workspace = true }
-itertools = { workspace = true }
 futures = { workspace = true }
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
